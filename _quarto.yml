@@ -1,0 +1,26 @@
+project:
+  type: website
+  output-dir: docs
+
+website:
+  title: "How to Statistics in R"
+  navbar:
+    left:
+      - text: t-test
+        menu:
+          - t-test/tmp.qmd
+      - text: Linear Modeling
+        menu:
+          - linear-regression/regression_summary.qmd
+        
+        
+
+format:
+  html:
+    embed-resources: true
+    toc: true
+    toc-depth: 4
+    theme: darkly
+
+
+

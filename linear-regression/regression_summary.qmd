@@ -1,0 +1,409 @@
+---
+title: Linear Regression
+author: George Whittington
+date: today
+date-format: long
+---
+
+## Load Libraries
+
+```{r}
+library(MASS)
+library(tidyverse)
+```
+
+## Load Data
+
+```{r}
+df <- Boston
+head(df)
+```
+
+## Scatter Plot
+
+### Prof Plot
+```{r}
+plot(x = Boston$lstat, y = Boston$medv,
+     xlab = "x (lstat)", ylab = "y (medv)",
+     main = "Scatter plot of x and y",
+     col="red", pch = 20, cex.lab = 1.5, cex.main = 1.5
+)
+```
+
+### My Plot
+
+```{r}
+df |> 
+	ggplot(aes(lstat, medv)) +
+	geom_point(color="red") +
+	labs(
+		title = "Scatter plot of x and y"
+	)
+```
+
+## Simple Linear Model
+
+### R Function
+
+```{r}
+simple_model <- lm(medv ~ lstat, data=df)
+summary(simple_model)
+```
+
+```{r}
+anova(simple_model)
+```
+
+### Manual
+
+#### Calculation of $\beta_1$ and $\beta_0$
+
+```{r}
+# sample size
+n <- nrow(df)
+
+# x variable
+x <- df$lstat
+# y variable
+y <- df$medv
+
+# mean of x
+x_bar <- mean(x)
+# mean of y
+y_bar <- mean(y)
+
+# variance of x: var(x)
+var_x <- sum((x - x_bar)^2) / (n - 1)
+# variance of y: var(y)
+var_y <- sum((y - y_bar)^2) / (n - 1)
+# standard deviation of x: sd(x)
+std_x <- sqrt(var_x)
+# standard deviation of y: sd(y)
+std_y <- sqrt(var_y)
+
+# covariance of x and y: cov(x, y)
+cov_x_y <- sum((x - x_bar)*(y - y_bar)) / (n - 1)
+# correlation of x and y: cor(x, y)
+cor_x_y <- cov_x_y / (std_x * std_y)
+
+# estimate of predictor 1
+beta_1 <- (sum((x - x_bar)*(y - y_bar))) / sum((x - x_bar)^2)
+# estimate of intercept 
+beta_0 <- y_bar - beta_1*x_bar
+```
+
+The current calculation for $\beta_1$ is the raw, simplified expression of dividing the covariance of x and y by the variation of x. Essentially the n - 1 terms cancel out. So, $\beta_1$ would also just equal `cov_x_y` / `var_x`. Algebraically, that expression is equivalent to `cor_x_y` * (`sd_y` / `sd_x`). So given seems to be the most computationally efficient. 
+
+#### Calculation of $\hat{\sigma}$ (Residual Standard Error) 
+
+```{r}
+# number of predictors
+p = 1
+
+# degrees of freedom
+dof <- n - p - 1
+
+# predicted values of y from fitted equation
+y_hat <- beta_0 + beta_1 * x
+# residuals: actual - predicted values
+residuals_y <- y - y_hat
+# residual sum of squares
+rss <- sum(residuals_y^2)
+
+# residual standard error
+sigma_hat <- sqrt(rss / dof)
+```
+
+The residual standard error, $\hat{\sigma}$ is the "typical" size of a residual. On average, the model's predictions are off by $\hat{\sigma}$
+
+#### Calculation of Standard Error of $\beta_1$ and $\beta_0$
+
+```{r}
+# sums of squares of x
+ss_x <- sum((x - x_bar)^2)
+
+# standard error of beta_1
+se_beta_1 <- sigma_hat / sqrt(ss_x)
+
+# standard error of beta_0
+se_beta_0 <- sigma_hat * sqrt((1 / n) + ((x_bar^2) / (ss_x)))
+```
+
+These values tell us that given a new sample from the population, how much does we think this estimate will deviate from the true population parameter
+
+#### Calculation of t values and probabilities
+
+Used for hypothesis testing the estimates of $\beta_p$
+
+$$
+	H_0: \beta_1 = 0 \qquad H_a: \beta_1 \neq 0
+$$
+
+```{r}
+# the null value of the slope
+h_0 <- 0
+
+# t-value for x assuming the null is true
+t_value_1 <- (beta_1 - h_0) / se_beta_1
+
+# p-value for the t-value of x
+p_value_1 <- 2 * pt(t_value_1, df=dof)
+
+# t-value for intercept assuming the null is true
+t_value_0 <- (beta_0 - h_0) / se_beta_0
+
+# p-value for the t-value of the intercept
+p_value_0 <- 2 * pt(abs(t_value_0), df=dof, lower.tail = FALSE)
+```
+
+While the code is different, the methods of obtaining the p-values are actually the same. This hypothesis test is a test of difference, which makes it a two sided test. The function `pt`, or the cumulative probability of the t-distribution, gives the area of the left. So then we multiply the result by two. We essentially do the same thing for the other p-value, but we multiply the result of he upper tail by 2. This works out since the distribution is symmetric. But in general, to get the correct p-value, use the left tail for negative values, and right tail for positive values due to floating point imprecision. 
+
+#### Calculation of $R^2$
+
+```{r}
+# total sums of squares
+tss <- sum((y - y_bar)^2)
+
+# R^2
+r_2 <- 1 - rss / tss
+```
+
+The total sum or squares is the total variance in the y variable, or how much the points vary around the mean. Residual sum of squares is the variance that is left over, or that is left unexplained by the model. Meaning that $R^2$ is the proportion of the total variance that the model explains. Or 1 minus the unexplained proportion, leaving the explained proportion.
+
+#### Calculation of Adjusted $R^2$
+
+```{r}
+# mean square error (MSE)
+mse <- rss / dof
+
+# mean square total (MST)
+mst <- tss / (n - 1)
+
+# adjusted R^2
+r_2_adj <- 1 - mse / mst
+
+# alternate calculation when R^2 is already gotten
+r_2_adj <- 1 - ((1 - r_2)*(n - 1)) / dof
+```
+
+#### Calculation of the F-statistic and p-value
+
+```{r}
+# sum of squares regression (SSR)
+ssr <- sum((y_hat - y_bar)^2)
+
+# mean square regression (MSR)
+msr <- ssr / p
+
+# F value
+f_value = msr / mse
+
+# p-value from F
+f_p_value <- pf(f_value, p, dof, lower.tail = FALSE)
+```
+
+- TSS: How much the actual y values vary around the mean of y
+
+- RSS: How much the actual y values vary around the predicted y values
+
+- SSR: How much the predicted y values vary around the mean of y
+
+TSS is your total variation. SSR is the part of that variation captured by the model's predictions ($\hat{y}$​), and RSS is the leftover "error" variation.
+
+### Plots with Line of Best Fit
+
+```{r}
+plot(x = Boston$lstat, y = Boston$medv,
+     xlab = "x (lstat)", ylab = "y (medv)",
+     main = "Simple Linear Regression Fit",
+     col="red", pch = 20, cex.lab = 1.5, cex.main = 1.5
+)
+abline(simple_model, col = "blue", lwd = 2)
+```
+
+```{r}
+df |> 
+	ggplot(aes(lstat, medv)) +
+	geom_point(color="red") +
+	geom_smooth(color="blue", se=FALSE, method="lm") +
+	labs(
+		title = "Simple Linear Regression Fit"
+	)
+```
+
+## Multiple Linear Regression
+
+### R Function
+
+```{r}
+multi_model <- lm(medv ~ lstat + rm + age, data=df)
+summary(multi_model)
+```
+
+### Manual Calculation
+
+#### Solving for $\hat{\beta}$
+
+Standard matrix notation for solving
+
+$$
+	\hat{\beta} = (X^{\top}X)^{-1} X^{\top}Y
+$$
+
+```{r}
+# matrix of all covariates
+X <- model.matrix(medv ~ lstat + rm + age, data=df)
+
+# response vector
+Y <- df$medv
+
+# X transpose X
+XTX <- t(X) %*% X
+
+# X transpose X inverse
+XTX_inv <- solve(XTX)
+
+# X transpose Y
+XTY <- t(X) %*% Y
+
+# plug in above for beta_hat
+beta_hat <- XTX_inv %*% XTY
+```
+
+Alternative method that is a little more computationally efficient
+
+$$
+	(X^{\top}X)\hat{\beta} = X^{\top}Y
+$$
+
+```{r}
+# solve(A, b) for x: Ax = b
+solve(XTX, XTY)
+```
+
+#### Solving for Standard Errors
+
+A few pieces need to solve this
+
+$$
+	\text{Var}(\hat{\beta}) = \sigma^2 (X^{\top}X)^{-1}
+$$
+
+Where $\sigma^2$ is going to be MSE, but we need
+
+- RSS: needs $\hat{y}$
+
+- DOF: degrees of freedom of the error
+
+```{r}
+P <- ncol(X) - 1
+
+# predicted values
+Y_hat <- X %*% beta_hat
+
+# degrees of freedom for the error term
+DoF <- n - P - 1
+
+# residual sum of squares
+RSS <- sum((Y - Y_hat)^2)
+
+# a.k.a. sigma_hat^2
+MSE <- RSS / DoF
+
+# sigma_hat from MSE
+standard_error <- sqrt(MSE)
+
+# variance-covariance matrix of beta_hat
+cov_matrix_beta <- MSE * XTX_inv
+
+# variance of each beta
+Var_beta <- diag(cov_matrix_beta)
+
+# standard error of each beta
+SE_beta <- as.matrix(sqrt(Var_beta))
+```
+
+#### Calculation of t values and probabilities
+
+Used for hypothesis testing the estimates of $\beta_p$
+
+$$
+	H_0: \beta_p = 0 \qquad H_a: \beta_p \neq 0
+$$
+
+```{r}
+# t-values of each beta estimate
+t_values <- (beta_hat - h_0) / SE_beta
+
+# p-value of each beta estimate, abs for consistency
+p_values <- 2 * pt(abs(t_values), DoF, lower.tail = FALSE)
+```
+
+#### Calculation of $R^2$
+
+```{r}
+# same Y, so same TSS, but recalculate anyway
+TSS <- sum((Y - mean(Y))^2)
+
+# unadjusted R^2
+R_2 <- 1 - RSS / TSS
+```
+
+#### Calculation of Adjusted $R^2$
+
+```{r}
+# using the alternate formula with R^2
+R_2_adj <- 1 - ((1 - R_2)*(n - 1)) / DoF
+```
+
+#### Calculation of F-stat and probability
+
+```{r}
+# sun or squares regression
+SSR <- sum((Y_hat - mean(Y))^2)
+
+# mean square regression
+MSR <- SSR / P
+
+# Overall F-value
+F_value <- MSR / MSE
+
+# p-value from F
+F_p_value <- pf(F_value, P, DoF, lower.tail = FALSE)
+```
+
+To get each predictors Sum Sq., each partial model would need to be fitted to do the subtraction process
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
